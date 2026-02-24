@@ -1,31 +1,23 @@
 import os
-from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from fastapi import FastAPI
 from trustops.evidence.logger import create_evidence_record
+from trustops.db.client import supabase
 
-# Load environment variables
-load_dotenv(dotenv_path=".env")
+ENV = os.getenv("ENV", "dev")  # default to dev
+SIGNING_SECRET = os.getenv(f"SIGNING_SECRET_{ENV.upper()}")
 
-app = FastAPI(title="TrustOps Dev API")
+app = FastAPI()
 
-class EvidencePayload(BaseModel):
-    decision_id: str
-    actor: str
-    action: str
-    context: dict
-
-@app.get("/")
-def root():
-    return {"status": "TrustOps Dev API running"}
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "env": ENV}
 
 @app.post("/evidence")
-def generate_evidence(payload: EvidencePayload):
-    try:
-        record = create_evidence_record(payload.dict())
-        if "error" in record:
-            raise HTTPException(status_code=500, detail=record["error"])
-        print("✅ Insert success:", record)
-        return record
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+def evidence(payload: dict):
+    record = create_evidence_record(payload)
+    return {
+        "timestamp_utc": record["timestamp_utc"],
+        "payload": payload,
+        "payload_hash": record["payload_hash"],
+        "signature": record["signature"],
+    }
