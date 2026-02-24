@@ -1,26 +1,33 @@
 import os
 from fastapi import FastAPI
 from trustops.evidence.logger import create_evidence_record
-from trustops.db.client import supabase
 
-# Determine current environment
+# Determine environment (default = dev)
 ENV = os.getenv("ENV", "dev").lower()
+
+# Load environment-specific signing secret
 SIGNING_SECRET = os.getenv(f"SIGNING_SECRET_{ENV.upper()}")
 
-app = FastAPI(title="TrustOps Core Proof")
+# Fail fast if secret missing
+if not SIGNING_SECRET:
+    raise ValueError(f"Missing signing secret for environment: {ENV}")
 
-# Health endpoint
+app = FastAPI(title=f"TrustOps Core ({ENV})")
+
+
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "env": ENV}
+    return {
+        "status": "ok",
+        "environment": ENV,
+        "signature_version": "v1"
+    }
 
-# Evidence endpoint
+
 @app.post("/evidence")
 def evidence(payload: dict):
-    record = create_evidence_record(payload, signing_secret=SIGNING_SECRET)
-    return {
-        "timestamp_utc": record["timestamp_utc"],
-        "payload": payload,
-        "payload_hash": record["payload_hash"],
-        "signature": record["signature"],
-    }
+    record = create_evidence_record(
+        payload=payload,
+        signing_secret=SIGNING_SECRET
+    )
+    return record
